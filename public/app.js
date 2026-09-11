@@ -1,4 +1,6 @@
 const $ = selector => document.querySelector(selector);
+const BASE = location.pathname.startsWith('/cloner') ? '/cloner' : '';
+const route = value => `${BASE}${value}`;
 const form = $('#analyzeForm');
 const urlInput = $('#url');
 const btn = $('#analyzeBtn');
@@ -21,7 +23,7 @@ function esc(value) {
 }
 
 async function api(url, options) {
-  const response = await fetch(url, options);
+  const response = await fetch(route(url), options);
   let body = {};
   try { body = await response.json(); } catch {}
   if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
@@ -78,7 +80,7 @@ function renderReport(data, id) {
 
   $('#frameUrl').textContent = m.finalUrl || m.requestedUrl || '';
   const shot = $('#screenshot');
-  shot.src = `/api/jobs/${encodeURIComponent(id)}/screenshot/desktop?t=${Date.now()}`;
+  shot.src = route(`/api/jobs/${encodeURIComponent(id)}/screenshot/desktop?t=${Date.now()}`);
   shot.dataset.job = id;
   $('#controlCount').textContent = `${(r.controls || []).length} detectados`;
   $('#controlsBody').innerHTML = (r.controls || []).slice(0, 120).map(control => {
@@ -162,7 +164,7 @@ $('#shotTabs').addEventListener('click', event => {
   if (!button || !currentJob) return;
   document.querySelectorAll('#shotTabs button').forEach(el => el.classList.remove('active'));
   button.classList.add('active');
-  $('#screenshot').src = `/api/jobs/${encodeURIComponent(currentJob.id)}/screenshot/${button.dataset.shot}?t=${Date.now()}`;
+  $('#screenshot').src = route(`/api/jobs/${encodeURIComponent(currentJob.id)}/screenshot/${button.dataset.shot}?t=${Date.now()}`);
 });
 
 urlInput.value = 'https://nextgen.uvronline.app/es/#advanced';
