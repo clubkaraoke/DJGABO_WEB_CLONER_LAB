@@ -1,0 +1,17 @@
+{
+  "name": "djgabo-web-cloner-lab",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DJGABO Web Cloner Lab - observable web UI capture and reverse-engineering toolkit",
+  "type": "module",
+  "scripts": {
+    "clone": "node src/clone.mjs",
+    "check": "node --check src/clone.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "playwright": "^1.55.0"
+  }
+}
