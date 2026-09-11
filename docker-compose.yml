@@ -6,7 +6,7 @@ services:
     init: true
     shm_size: 1gb
     ports:
-      - "127.0.0.1:8787:8787"
+      - "127.0.0.1:8805:8787"
     environment:
       NODE_ENV: production
       PORT: 8787
@@ -16,6 +16,9 @@ services:
       JOB_TIMEOUT_MS: 120000
       RATE_LIMIT_PER_HOUR: 12
     volumes:
-      - ./captures:/app/captures
+      - cloner_captures:/app/captures
     security_opt:
       - no-new-privileges:true
+
+volumes:
+  cloner_captures:
