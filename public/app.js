@@ -1,172 +1,37 @@
-const $ = selector => document.querySelector(selector);
-const BASE = location.pathname.startsWith('/cloner') ? '/cloner' : '';
-const route = value => `${BASE}${value}`;
-const form = $('#analyzeForm');
-const urlInput = $('#url');
-const btn = $('#analyzeBtn');
-const jobPanel = $('#jobPanel');
-const jobTitle = $('#jobTitle');
-const jobUrl = $('#jobUrl');
-const jobState = $('#jobState');
-const progressBar = $('#progressBar');
-const jobNote = $('#jobNote');
-const results = $('#results');
-const errorPanel = $('#errorPanel');
-const errorText = $('#errorText');
-const serviceStatus = $('#serviceStatus');
-let currentJob = null;
-let currentReport = null;
-let pollTimer = null;
-
-function esc(value) {
-  return String(value ?? '').replace(/[&<>'"]/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[ch]));
-}
-
-async function api(url, options) {
-  const response = await fetch(route(url), options);
-  let body = {};
-  try { body = await response.json(); } catch {}
-  if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
-  return body;
-}
-
-async function health() {
-  try {
-    const info = await api('/health');
-    serviceStatus.classList.add('ok');
-    serviceStatus.innerHTML = `<i></i> Motor online · ${info.active} activo · ${info.queued} en cola`;
-  } catch {
-    serviceStatus.classList.remove('ok');
-    serviceStatus.innerHTML = '<i></i> Motor sin conexión';
-  }
-}
-
-function setJobState(job) {
-  jobPanel.classList.remove('hidden');
-  errorPanel.classList.add('hidden');
-  jobUrl.textContent = job.url || '';
-  if (job.status === 'queued') {
-    jobTitle.textContent = 'Esperando turno de Chromium';
-    jobState.textContent = 'EN COLA';
-    progressBar.style.width = '15%';
-    jobNote.textContent = job.queuePosition ? `Posición ${job.queuePosition} en la cola.` : 'Preparando proceso aislado.';
-  } else if (job.status === 'running') {
-    jobTitle.textContent = 'Analizando interfaz y red pública';
-    jobState.textContent = 'ANALIZANDO';
-    progressBar.style.width = '68%';
-    jobNote.textContent = 'Capturando desktop, tablet, mobile, controles, estilos y requests observables.';
-  } else if (job.status === 'completed') {
-    jobTitle.textContent = job.manifest?.title || 'Análisis completado';
-    jobState.textContent = 'LISTO';
-    progressBar.style.width = '100%';
-    jobNote.textContent = job.manifest?.frameworkHints?.cloudflareChallenge
-      ? 'Se detectó una pantalla de desafío Cloudflare. La captura puede corresponder al challenge y no a la aplicación final.'
-      : 'Captura terminada. Puedes revisar el mapa de la interfaz.';
-  }
-}
-
-function renderReport(data, id) {
-  currentReport = data;
-  const m = data.manifest || {};
-  const r = data.report || {};
-  const counts = m.counts || {};
-  $('#metrics').innerHTML = [
-    ['Controles', counts.controls || 0],
-    ['Elementos', counts.elements || 0],
-    ['Imágenes', counts.images || 0],
-    ['Requests', counts.network || 0],
-    ['Errores', counts.pageErrors || 0]
-  ].map(([label, value]) => `<div class="metric"><b>${esc(value)}</b><span>${esc(label)}</span></div>`).join('');
-
-  $('#frameUrl').textContent = m.finalUrl || m.requestedUrl || '';
-  const shot = $('#screenshot');
-  shot.src = route(`/api/jobs/${encodeURIComponent(id)}/screenshot/desktop?t=${Date.now()}`);
-  shot.dataset.job = id;
-  $('#controlCount').textContent = `${(r.controls || []).length} detectados`;
-  $('#controlsBody').innerHTML = (r.controls || []).slice(0, 120).map(control => {
-    const label = control.text || control.ariaLabel || control.name || control.href || '(sin texto)';
-    const state = control.disabled ? 'deshabilitado' : control.ariaSelected === 'true' ? 'seleccionado' : control.ariaExpanded === 'true' ? 'abierto' : 'visible';
-    return `<tr><td>${esc(control.role || control.tag || 'control')}</td><td>${esc(label)}</td><td>${esc(state)}</td></tr>`;
-  }).join('') || '<tr><td colspan="3">No se detectaron controles visibles.</td></tr>';
-
-  const hints = r.frameworkHints || {};
-  $('#techList').innerHTML = Object.entries({ React:hints.react, Vue:hints.vue, Angular:hints.angular, Webflow:hints.webflow, 'Cloudflare challenge':hints.cloudflareChallenge })
-    .map(([name, on]) => `<div class="tech ${on ? 'on' : ''}"><b>${esc(name)}</b><span>${on ? 'DETECTADO' : '—'}</span></div>`).join('');
-
-  const hostCounts = new Map();
-  for (const item of data.network || []) {
-    if (!item.hostname) continue;
-    hostCounts.set(item.hostname, (hostCounts.get(item.hostname) || 0) + 1);
-  }
-  $('#hosts').innerHTML = [...hostCounts.entries()].sort((a,b) => b[1] - a[1]).slice(0, 24)
-    .map(([host, count]) => `<span>${esc(host)} · ${count}</span>`).join('') || '<span>Sin hosts registrados</span>';
-
-  $('#headings').innerHTML = (r.headings || []).slice(0, 120).map(h => `<div class="heading-row level-${h.level}"><b>H${h.level}</b><span>${esc(h.text || '(vacío)')}</span></div>`).join('') || '<div class="heading-row"><span>No se encontraron encabezados.</span></div>';
-  results.classList.remove('hidden');
-}
-
-async function poll(id) {
-  try {
-    const job = await api(`/api/jobs/${encodeURIComponent(id)}`);
-    currentJob = job;
-    setJobState(job);
-    await health();
-    if (job.status === 'completed') {
-      btn.disabled = false;
-      const data = await api(`/api/jobs/${encodeURIComponent(id)}/report`);
-      renderReport(data, id);
-      return;
-    }
-    if (job.status === 'failed') {
-      btn.disabled = false;
-      errorText.textContent = job.error || 'Error desconocido.';
-      errorPanel.classList.remove('hidden');
-      return;
-    }
-    pollTimer = setTimeout(() => poll(id), 1800);
-  } catch (error) {
-    btn.disabled = false;
-    errorText.textContent = error.message;
-    errorPanel.classList.remove('hidden');
-  }
-}
-
-form.addEventListener('submit', async event => {
-  event.preventDefault();
-  clearTimeout(pollTimer);
-  results.classList.add('hidden');
-  errorPanel.classList.add('hidden');
-  btn.disabled = true;
-  jobPanel.classList.remove('hidden');
-  jobTitle.textContent = 'Validando URL';
-  jobUrl.textContent = urlInput.value.trim();
-  jobState.textContent = 'PREPARANDO';
-  progressBar.style.width = '7%';
-  jobNote.textContent = 'Comprobando que el destino sea público y seguro para el VPS.';
-  try {
-    const job = await api('/api/analyze', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: urlInput.value.trim() })
-    });
-    currentJob = job;
-    setJobState(job);
-    poll(job.id);
-  } catch (error) {
-    btn.disabled = false;
-    errorText.textContent = error.message;
-    errorPanel.classList.remove('hidden');
-  }
-});
-
-$('#shotTabs').addEventListener('click', event => {
-  const button = event.target.closest('button[data-shot]');
-  if (!button || !currentJob) return;
-  document.querySelectorAll('#shotTabs button').forEach(el => el.classList.remove('active'));
-  button.classList.add('active');
-  $('#screenshot').src = route(`/api/jobs/${encodeURIComponent(currentJob.id)}/screenshot/${button.dataset.shot}?t=${Date.now()}`);
-});
-
-urlInput.value = 'https://nextgen.uvronline.app/es/#advanced';
-health();
-setInterval(health, 15000);
+const $=s=>document.querySelector(s); const $$=s=>[...document.querySelectorAll(s)];
+const pages={
+  vocals_music:{title:'Separador de voces',subtitle:'Separa voces e instrumental con tecnología de IA avanzada',about:'Separación de voz e instrumental de una mezcla terminada usando modelos de IA.'},
+  lv_other:{title:'Extractor de voz principal',subtitle:'Aísla la voz principal y conserva los coros en el acompañamiento',about:'Aislamiento de voz principal manteniendo los coros y armonías en la pista de acompañamiento.'},
+  bv_other:{title:'Extractor de Coros',subtitle:'Aislamiento profesional de coros con tecnología de IA avanzada',about:'Extracción de coros de una mezcla terminada: una pista separada con coros y armonías, sin la voz principal.'},
+  guitar_other:{title:'Extractor de Guitarra',subtitle:'Separa guitarra del resto de la mezcla',about:'Aislamiento de guitarra con modelos entrenados para instrumentos armónicos.'},
+  drums_other:{title:'Extractor de Batería',subtitle:'Aísla batería y percusión de la mezcla',about:'Separación de batería frente al resto de instrumentos.'},
+  piano_other:{title:'Extractor de Piano',subtitle:'Aísla piano de tu audio con IA',about:'Separación especializada de piano.'},
+  bass_other:{title:'Extractor de Bajo',subtitle:'Separa el bajo del resto de la mezcla',about:'Aislamiento de frecuencias y contenido de bajo.'},
+  wind_other:{title:'Extractor de Vientos',subtitle:'Aísla instrumentos de viento',about:'Separación de instrumentos de viento respecto al resto de la mezcla.'},
+  strings_other:{title:'Extractor de Cuerdas',subtitle:'Aísla violines y secciones de cuerdas',about:'Separación especializada de cuerdas.'},
+  splitter:{title:'Separador de Stems',subtitle:'Divide la canción en múltiples pistas independientes',about:'Separación multipista para voz, batería, bajo y otros stems.'},
+  dereverb:{title:'Eliminar eco / reverberación',subtitle:'Reduce reverberación y reflexiones del audio',about:'Procesamiento para reducir reverberación y eco.'},
+  decrowd:{title:'De-crowd',subtitle:'Reduce ruido de público y ambiente',about:'Procesamiento especializado para grabaciones con público.'},
+  denoise:{title:'De-noise',subtitle:'Limpia ruido constante y artefactos',about:'Reducción de ruido con modelos neuronales.'},
+  delossifier:{title:'Mejorar calidad',subtitle:'Recupera detalle de audio degradado',about:'Restauración y mejora perceptual del audio.'},
+  experimental:{title:'Otros modelos',subtitle:'Herramientas experimentales y nuevos modelos',about:'Área para pruebas y modelos experimentales.'}
+};
+const models={recommend:[['Mel-RoFormer by Gabox Fv7','Recomendado'],['RoFormer Lead/Back B','Lead / Back'],['Mel-RoFormer Vocals v2','Voz'],['MDX23C InstVoc HQ','Instrumental'],['BS-RoFormer SW','Premium']],legacy:[['UVR-MDX-NET Main','Clásico'],['Kim Vocal 2','Voz'],['Demucs v4 HT','4 stems'],['MDX-Net Inst HQ 3','Instrumental']],test:[['Mel-RoFormer vocfv7beta3','Beta'],['RoFormer Lead/Back C','Test'],['SFX Splitter Jazzpear','SFX']]};
+let currentPage='vocals_music', currentFilter='recommend', busy=false;
+function showToast(msg){const t=$('#toast');t.textContent=msg;t.classList.remove('hidden');clearTimeout(t._x);t._x=setTimeout(()=>t.classList.add('hidden'),2200)}
+function setPage(key){if(!pages[key])return; currentPage=key;const p=pages[key];$('#heroTitle').textContent=p.title;$('#heroSubtitle').textContent=p.subtitle;$('#aboutText').textContent=p.about;$$('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.page===key));$$('.tool-pill').forEach(x=>x.classList.toggle('active',x.dataset.page===key));const parent=$(`.nav-item[data-page="${key}"]`)?.closest('.menu-group');if(parent)parent.classList.add('open');history.replaceState(null,'',`#${key==='vocals_music'?'advanced':key}`)}
+$$('.group-button').forEach(b=>b.onclick=()=>b.closest('.menu-group').classList.toggle('open'));
+$$('[data-page]').forEach(b=>b.onclick=()=>{setPage(b.dataset.page);if(innerWidth<880)$('#sideMenu').classList.remove('mobile-open')});
+$('#menuBtn').onclick=()=>$('#sideMenu').classList.toggle('mobile-open');
+$('#themeBtn').onclick=()=>{document.body.classList.toggle('light');$('#themeBtn').textContent=document.body.classList.contains('light')?'☀':'☾'};
+$('#loginBtn').onclick=()=>$('#loginModal').classList.remove('hidden');$$('[data-close]').forEach(b=>b.onclick=()=>$('#'+b.dataset.close).classList.add('hidden'));$('#loginModal').onclick=e=>{if(e.target.id==='loginModal')e.currentTarget.classList.add('hidden')};$$('.modal button:not(.modal-close)').forEach(b=>b.onclick=()=>showToast('Demo visual: login no conectado'));
+const zone=$('#uploadZone'),fileInput=$('#fileInput');$('#uploadButton').onclick=()=>fileInput.click();['dragenter','dragover'].forEach(ev=>zone.addEventListener(ev,e=>{e.preventDefault();zone.classList.add('drag')}));['dragleave','drop'].forEach(ev=>zone.addEventListener(ev,e=>{e.preventDefault();zone.classList.remove('drag')}));zone.addEventListener('drop',e=>{const f=e.dataTransfer.files[0];if(f)loadFile(f)});fileInput.onchange=()=>fileInput.files[0]&&loadFile(fileInput.files[0]);function loadFile(f){$('#fileName').textContent=f.name;$('#fileMeta').textContent=`${(f.size/1024/1024).toFixed(1)} MB · listo para procesar`;$('#fileReady').classList.remove('hidden');$('#estimateText').textContent='Archivo cargado · listo para procesar';$('.status-dot').classList.add('ready')}$('#clearFile').onclick=e=>{e.stopPropagation();fileInput.value='';$('#fileReady').classList.add('hidden');$('#estimateText').textContent='Listo para procesar';$('.status-dot').classList.remove('ready')};
+function closeSelects(except){$$('.select-menu').forEach(m=>{if(m!==except)m.classList.add('hidden')})}function bindSelect(id){const root=$(id),trigger=root.querySelector('.select-trigger'),menu=root.querySelector('.select-menu');trigger.onclick=e=>{e.stopPropagation();const opening=menu.classList.contains('hidden');closeSelects(menu);menu.classList.toggle('hidden',!opening)}}bindSelect('#modelSelect');bindSelect('#formatSelect');bindSelect('#postSelect');document.addEventListener('click',()=>closeSelects());
+function renderModels(){const list=$('#modelList');list.innerHTML=models[currentFilter].map(([name,badge])=>`<button class="model-option ${$('#modelText').textContent===name?'active':''}" data-name="${name}"><span>${name}</span>${badge==='Premium'?'<b class="premium">PRO</b>':`<small>${badge}</small>`}</button>`).join('');$$('.model-option').forEach(b=>b.onclick=e=>{e.stopPropagation();$('#modelText').textContent=b.dataset.name;$('#modelSelect .select-menu').classList.add('hidden');$('#postRow').classList.toggle('hidden',!/RoFormer|MDX/.test(b.dataset.name));renderModels()})}renderModels();$$('.model-tabs button').forEach(b=>b.onclick=e=>{e.stopPropagation();currentFilter=b.dataset.filter;$$('.model-tabs button').forEach(x=>x.classList.toggle('active',x===b));renderModels()});
+$$('#formatSelect .select-menu button').forEach(b=>b.onclick=e=>{e.stopPropagation();$('#formatText').textContent=b.dataset.value;$('#formatSelect .select-menu').classList.add('hidden')});$$('#postSelect .select-menu button').forEach(b=>b.onclick=e=>{e.stopPropagation();$('#postText').textContent=b.dataset.value;$('#postSelect .select-menu').classList.add('hidden')});
+const adv=$('#advancedPanel'),more=$('#moreTools');more.onclick=()=>{const hidden=adv.classList.toggle('hidden');more.querySelector('span').textContent=hidden?'Mostrar más herramientas':'Mostrar menos herramientas';more.querySelector('b').textContent=hidden?'⌄':'⌃';more.setAttribute('aria-expanded',String(!hidden))};
+function range(id,out,fmt=v=>v){$(id).oninput=e=>$(out).textContent=fmt(e.target.value)}range('#segment','#segmentOut');range('#overlap','#overlapOut');range('#comp','#compOut',v=>(+v).toFixed(3));$$('.switch').forEach(s=>s.onclick=()=>{s.classList.toggle('on');const on=s.classList.contains('on');s.setAttribute('aria-pressed',String(on));if(s.dataset.switch==='stemnames')$('#stemEditor').classList.toggle('hidden',!on)});$('#resetAdvanced').onclick=()=>{$('#segment').value=352;$('#segmentOut').textContent='352';$('#overlap').value=8;$('#overlapOut').textContent='8';$('#comp').value=1;$('#compOut').textContent='1.000';$$('.switch').forEach(s=>{const on=s.dataset.switch==='normalize';s.classList.toggle('on',on);s.setAttribute('aria-pressed',String(on))});$('#stemEditor').classList.add('hidden');showToast('Ajustes restablecidos')};
+function wave(){return Array.from({length:54},(_,i)=>`<i style="height:${8+Math.round((Math.sin(i*.8)+1)*15+Math.random()*13)}px"></i>`).join('')}
+$('#processButton').onclick=()=>{if(busy)return;busy=true;const b=$('#processButton');b.classList.add('loading');b.querySelector('span').textContent='Procesando…';$('#estimateText').textContent='Analizando audio · 12%';let n=12;const timer=setInterval(()=>{n=Math.min(96,n+Math.ceil(Math.random()*14));$('#estimateText').textContent=`Procesando con ${$('#modelText').textContent} · ${n}%`},370);setTimeout(()=>{clearInterval(timer);busy=false;b.classList.remove('loading');b.querySelector('span').textContent='Procesar';$('#estimateText').textContent='Proceso completado';const names=currentPage==='bv_other'?['Coros','Otros']:currentPage==='lv_other'?['Voz principal','Instrumental + coros']:currentPage==='splitter'?['Vocals','Drums','Bass','Other']:['Voz','Instrumental'];$('#stemList').innerHTML=names.map(n=>`<div class="stem-card"><div class="stem-card-top"><strong>${n}</strong><button>Descargar ${$('#formatText').textContent.split(' ')[0]}</button></div><div class="wave">${wave()}</div></div>`).join('');$('#resultPanel').classList.remove('hidden');$('#resultPanel').scrollIntoView({behavior:'smooth',block:'center'});$$('.stem-card button').forEach(x=>x.onclick=()=>showToast('Demo visual: descarga pendiente de conectar al motor'))},2300)};
+$('#processAgain').onclick=()=>{$('#resultPanel').classList.add('hidden');window.scrollTo({top:0,behavior:'smooth'})};
+const hash=location.hash.replace('#','');if(hash&&hash!=='advanced'&&pages[hash])setPage(hash);else setPage('vocals_music');
