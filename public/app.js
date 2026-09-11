@@ -1,37 +1,187 @@
-const $=s=>document.querySelector(s); const $$=s=>[...document.querySelectorAll(s)];
-const pages={
-  vocals_music:{title:'Separador de voces',subtitle:'Separa voces e instrumental con tecnología de IA avanzada',about:'Separación de voz e instrumental de una mezcla terminada usando modelos de IA.'},
-  lv_other:{title:'Extractor de voz principal',subtitle:'Aísla la voz principal y conserva los coros en el acompañamiento',about:'Aislamiento de voz principal manteniendo los coros y armonías en la pista de acompañamiento.'},
-  bv_other:{title:'Extractor de Coros',subtitle:'Aislamiento profesional de coros con tecnología de IA avanzada',about:'Extracción de coros de una mezcla terminada: una pista separada con coros y armonías, sin la voz principal.'},
-  guitar_other:{title:'Extractor de Guitarra',subtitle:'Separa guitarra del resto de la mezcla',about:'Aislamiento de guitarra con modelos entrenados para instrumentos armónicos.'},
-  drums_other:{title:'Extractor de Batería',subtitle:'Aísla batería y percusión de la mezcla',about:'Separación de batería frente al resto de instrumentos.'},
-  piano_other:{title:'Extractor de Piano',subtitle:'Aísla piano de tu audio con IA',about:'Separación especializada de piano.'},
-  bass_other:{title:'Extractor de Bajo',subtitle:'Separa el bajo del resto de la mezcla',about:'Aislamiento de frecuencias y contenido de bajo.'},
-  wind_other:{title:'Extractor de Vientos',subtitle:'Aísla instrumentos de viento',about:'Separación de instrumentos de viento respecto al resto de la mezcla.'},
-  strings_other:{title:'Extractor de Cuerdas',subtitle:'Aísla violines y secciones de cuerdas',about:'Separación especializada de cuerdas.'},
-  splitter:{title:'Separador de Stems',subtitle:'Divide la canción en múltiples pistas independientes',about:'Separación multipista para voz, batería, bajo y otros stems.'},
-  dereverb:{title:'Eliminar eco / reverberación',subtitle:'Reduce reverberación y reflexiones del audio',about:'Procesamiento para reducir reverberación y eco.'},
-  decrowd:{title:'De-crowd',subtitle:'Reduce ruido de público y ambiente',about:'Procesamiento especializado para grabaciones con público.'},
-  denoise:{title:'De-noise',subtitle:'Limpia ruido constante y artefactos',about:'Reducción de ruido con modelos neuronales.'},
-  delossifier:{title:'Mejorar calidad',subtitle:'Recupera detalle de audio degradado',about:'Restauración y mejora perceptual del audio.'},
-  experimental:{title:'Otros modelos',subtitle:'Herramientas experimentales y nuevos modelos',about:'Área para pruebas y modelos experimentales.'}
+const $=s=>document.querySelector(s);
+const $$=s=>[...document.querySelectorAll(s)];
+
+const tools={
+  vocals:{
+    title:'Eliminar Voces de Cualquier Canción',subtitle:'Separación HQ de canción en voces e instrumental',
+    children:[
+      {id:'vocals_music',label:'Música y voces',icon:'♨',model:'BS-RoFormer Revive 3e (unwa)'},
+      {id:'lead',label:'Conservar coros',icon:'♧',model:'RoFormer Lead/Back B'},
+      {id:'back',label:'Aislar coros',icon:'♧',model:'RoFormer Lead/Back B'}
+    ]
+  },
+  instruments:{
+    title:'Separar Instrumentos',subtitle:'Aislamiento de instrumentos con modelos de IA',
+    children:[
+      {id:'guitar',label:'Guitarra',icon:'♭',model:'BS-RoFormer 6-stems SW'},
+      {id:'drums',label:'Batería',icon:'◉',model:'Demucs v4 (Drumsep)'},
+      {id:'piano',label:'Piano',icon:'♬',model:'BS-RoFormer 6-stems SW'},
+      {id:'splitter',label:'Separador',icon:'⑂',model:'Demucs v4'},
+      {id:'bass',label:'Bajo',icon:'𝄢',model:'BS-RoFormer 6-stems SW'}
+    ]
+  },
+  enhance:{
+    title:'Mejorar Audio',subtitle:'Limpieza y restauración de audio con IA',
+    children:[
+      {id:'dereverb',label:'Eco / reverb',icon:'≈',model:'MDX DeReverb'},
+      {id:'decrowd',label:'De-crowd',icon:'◎',model:'MDX (De-crowd)'},
+      {id:'denoise',label:'De-noise',icon:'◌',model:'MDX Denoise'},
+      {id:'quality',label:'Mejorar calidad',icon:'✦',model:'Audio Enhancer'}
+    ]
+  },
+  other:{title:'Otras Herramientas',subtitle:'Modelos experimentales y utilidades adicionales',children:[]}
 };
-const models={recommend:[['Mel-RoFormer by Gabox Fv7','Recomendado'],['RoFormer Lead/Back B','Lead / Back'],['Mel-RoFormer Vocals v2','Voz'],['MDX23C InstVoc HQ','Instrumental'],['BS-RoFormer SW','Premium']],legacy:[['UVR-MDX-NET Main','Clásico'],['Kim Vocal 2','Voz'],['Demucs v4 HT','4 stems'],['MDX-Net Inst HQ 3','Instrumental']],test:[['Mel-RoFormer vocfv7beta3','Beta'],['RoFormer Lead/Back C','Test'],['SFX Splitter Jazzpear','SFX']]};
-let currentPage='vocals_music', currentFilter='recommend', busy=false;
-function showToast(msg){const t=$('#toast');t.textContent=msg;t.classList.remove('hidden');clearTimeout(t._x);t._x=setTimeout(()=>t.classList.add('hidden'),2200)}
-function setPage(key){if(!pages[key])return; currentPage=key;const p=pages[key];$('#heroTitle').textContent=p.title;$('#heroSubtitle').textContent=p.subtitle;$('#aboutText').textContent=p.about;$$('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.page===key));$$('.tool-pill').forEach(x=>x.classList.toggle('active',x.dataset.page===key));const parent=$(`.nav-item[data-page="${key}"]`)?.closest('.menu-group');if(parent)parent.classList.add('open');history.replaceState(null,'',`#${key==='vocals_music'?'advanced':key}`)}
-$$('.group-button').forEach(b=>b.onclick=()=>b.closest('.menu-group').classList.toggle('open'));
-$$('[data-page]').forEach(b=>b.onclick=()=>{setPage(b.dataset.page);if(innerWidth<880)$('#sideMenu').classList.remove('mobile-open')});
-$('#menuBtn').onclick=()=>$('#sideMenu').classList.toggle('mobile-open');
-$('#themeBtn').onclick=()=>{document.body.classList.toggle('light');$('#themeBtn').textContent=document.body.classList.contains('light')?'☀':'☾'};
-$('#loginBtn').onclick=()=>$('#loginModal').classList.remove('hidden');$$('[data-close]').forEach(b=>b.onclick=()=>$('#'+b.dataset.close).classList.add('hidden'));$('#loginModal').onclick=e=>{if(e.target.id==='loginModal')e.currentTarget.classList.add('hidden')};$$('.modal button:not(.modal-close)').forEach(b=>b.onclick=()=>showToast('Demo visual: login no conectado'));
-const zone=$('#uploadZone'),fileInput=$('#fileInput');$('#uploadButton').onclick=()=>fileInput.click();['dragenter','dragover'].forEach(ev=>zone.addEventListener(ev,e=>{e.preventDefault();zone.classList.add('drag')}));['dragleave','drop'].forEach(ev=>zone.addEventListener(ev,e=>{e.preventDefault();zone.classList.remove('drag')}));zone.addEventListener('drop',e=>{const f=e.dataTransfer.files[0];if(f)loadFile(f)});fileInput.onchange=()=>fileInput.files[0]&&loadFile(fileInput.files[0]);function loadFile(f){$('#fileName').textContent=f.name;$('#fileMeta').textContent=`${(f.size/1024/1024).toFixed(1)} MB · listo para procesar`;$('#fileReady').classList.remove('hidden');$('#estimateText').textContent='Archivo cargado · listo para procesar';$('.status-dot').classList.add('ready')}$('#clearFile').onclick=e=>{e.stopPropagation();fileInput.value='';$('#fileReady').classList.add('hidden');$('#estimateText').textContent='Listo para procesar';$('.status-dot').classList.remove('ready')};
-function closeSelects(except){$$('.select-menu').forEach(m=>{if(m!==except)m.classList.add('hidden')})}function bindSelect(id){const root=$(id),trigger=root.querySelector('.select-trigger'),menu=root.querySelector('.select-menu');trigger.onclick=e=>{e.stopPropagation();const opening=menu.classList.contains('hidden');closeSelects(menu);menu.classList.toggle('hidden',!opening)}}bindSelect('#modelSelect');bindSelect('#formatSelect');bindSelect('#postSelect');document.addEventListener('click',()=>closeSelects());
-function renderModels(){const list=$('#modelList');list.innerHTML=models[currentFilter].map(([name,badge])=>`<button class="model-option ${$('#modelText').textContent===name?'active':''}" data-name="${name}"><span>${name}</span>${badge==='Premium'?'<b class="premium">PRO</b>':`<small>${badge}</small>`}</button>`).join('');$$('.model-option').forEach(b=>b.onclick=e=>{e.stopPropagation();$('#modelText').textContent=b.dataset.name;$('#modelSelect .select-menu').classList.add('hidden');$('#postRow').classList.toggle('hidden',!/RoFormer|MDX/.test(b.dataset.name));renderModels()})}renderModels();$$('.model-tabs button').forEach(b=>b.onclick=e=>{e.stopPropagation();currentFilter=b.dataset.filter;$$('.model-tabs button').forEach(x=>x.classList.toggle('active',x===b));renderModels()});
-$$('#formatSelect .select-menu button').forEach(b=>b.onclick=e=>{e.stopPropagation();$('#formatText').textContent=b.dataset.value;$('#formatSelect .select-menu').classList.add('hidden')});$$('#postSelect .select-menu button').forEach(b=>b.onclick=e=>{e.stopPropagation();$('#postText').textContent=b.dataset.value;$('#postSelect .select-menu').classList.add('hidden')});
-const adv=$('#advancedPanel'),more=$('#moreTools');more.onclick=()=>{const hidden=adv.classList.toggle('hidden');more.querySelector('span').textContent=hidden?'Mostrar más herramientas':'Mostrar menos herramientas';more.querySelector('b').textContent=hidden?'⌄':'⌃';more.setAttribute('aria-expanded',String(!hidden))};
-function range(id,out,fmt=v=>v){$(id).oninput=e=>$(out).textContent=fmt(e.target.value)}range('#segment','#segmentOut');range('#overlap','#overlapOut');range('#comp','#compOut',v=>(+v).toFixed(3));$$('.switch').forEach(s=>s.onclick=()=>{s.classList.toggle('on');const on=s.classList.contains('on');s.setAttribute('aria-pressed',String(on));if(s.dataset.switch==='stemnames')$('#stemEditor').classList.toggle('hidden',!on)});$('#resetAdvanced').onclick=()=>{$('#segment').value=352;$('#segmentOut').textContent='352';$('#overlap').value=8;$('#overlapOut').textContent='8';$('#comp').value=1;$('#compOut').textContent='1.000';$$('.switch').forEach(s=>{const on=s.dataset.switch==='normalize';s.classList.toggle('on',on);s.setAttribute('aria-pressed',String(on))});$('#stemEditor').classList.add('hidden');showToast('Ajustes restablecidos')};
-function wave(){return Array.from({length:54},(_,i)=>`<i style="height:${8+Math.round((Math.sin(i*.8)+1)*15+Math.random()*13)}px"></i>`).join('')}
-$('#processButton').onclick=()=>{if(busy)return;busy=true;const b=$('#processButton');b.classList.add('loading');b.querySelector('span').textContent='Procesando…';$('#estimateText').textContent='Analizando audio · 12%';let n=12;const timer=setInterval(()=>{n=Math.min(96,n+Math.ceil(Math.random()*14));$('#estimateText').textContent=`Procesando con ${$('#modelText').textContent} · ${n}%`},370);setTimeout(()=>{clearInterval(timer);busy=false;b.classList.remove('loading');b.querySelector('span').textContent='Procesar';$('#estimateText').textContent='Proceso completado';const names=currentPage==='bv_other'?['Coros','Otros']:currentPage==='lv_other'?['Voz principal','Instrumental + coros']:currentPage==='splitter'?['Vocals','Drums','Bass','Other']:['Voz','Instrumental'];$('#stemList').innerHTML=names.map(n=>`<div class="stem-card"><div class="stem-card-top"><strong>${n}</strong><button>Descargar ${$('#formatText').textContent.split(' ')[0]}</button></div><div class="wave">${wave()}</div></div>`).join('');$('#resultPanel').classList.remove('hidden');$('#resultPanel').scrollIntoView({behavior:'smooth',block:'center'});$$('.stem-card button').forEach(x=>x.onclick=()=>showToast('Demo visual: descarga pendiente de conectar al motor'))},2300)};
-$('#processAgain').onclick=()=>{$('#resultPanel').classList.add('hidden');window.scrollTo({top:0,behavior:'smooth'})};
-const hash=location.hash.replace('#','');if(hash&&hash!=='advanced'&&pages[hash])setPage(hash);else setPage('vocals_music');
+
+const modelSets={
+  recommended:[
+    ['BS-RoFormer Revive 3e (unwa)','vocal / instrumental'],
+    ['RoFormer Lead/Back B','principal / coros'],
+    ['BS-RoFormer 6-stems SW','6 stems'],
+    ['Demucs v4 (Drumsep)','stems'],
+    ['MDX (De-crowd)','limpieza']
+  ],
+  old:[
+    ['UVR-MDX-NET Main','clásico'],
+    ['Kim Vocal 2','voces'],
+    ['MDX-Net Inst HQ 3','instrumental']
+  ],
+  test:[
+    ['RoFormer Lead/Back C','prueba'],
+    ['Mel-RoFormer vocfv7beta3','beta'],
+    ['BS-RoFormer Duality v1','experimental']
+  ]
+};
+
+const historyData=[
+  ['green','Brunella Torpoco - Cerves...','BS-RoFormer 6-stems SW'],
+  ['green','Victor Manuel del Perú - M...','BS-RoFormer 6-stems SW'],
+  ['green','Victor Manuel del Perú - M...','Demucs v4 (Drumsep)'],
+  ['purple','Grupo Amor Rebelde - Mix...','RoFormer Lead/Back B'],
+  ['red','Otros ← Grupo Amor Rebe...','MDX (De-crowd)'],
+  ['green','Batería ← Otros ← Grupo ...','Demucs v4 (Drumsep)'],
+  ['red','Otros ← Grupo Amor Rebe...','BS-RoFormer Duality by giilian v1']
+];
+
+let activeCategory='vocals';
+let activeChild='vocals_music';
+let activeModelTab='recommended';
+let historyOffset=0;
+
+function toast(message){
+  const el=$('#toast'); el.textContent=message; el.classList.remove('hidden');
+  clearTimeout(el._timer); el._timer=setTimeout(()=>el.classList.add('hidden'),1900);
+}
+
+function renderHistory(){
+  const list=$('#historyList');
+  const rows=[...historyData.slice(historyOffset),...historyData.slice(0,historyOffset)].slice(0,7);
+  list.innerHTML=rows.map(([tone,title,model])=>`<div class="history-item ${tone}"><div class="history-icon">${tone==='purple'?'♧':tone==='red'?'◎':'⌘'}</div><div class="history-copy"><strong>${title}</strong><small>${model}</small></div><div class="history-check">✓</div></div>`).join('');
+}
+
+function setModel(name){
+  $('#modelText').textContent=name;
+  renderModels();
+}
+
+function renderModels(){
+  const host=$('#modelOptions');
+  host.innerHTML=modelSets[activeModelTab].map(([name,meta])=>`<button class="model-option ${$('#modelText').textContent===name?'active':''}" data-name="${name}"><span>${name}</span><small>${meta}</small></button>`).join('');
+  $$('.model-option').forEach(btn=>btn.addEventListener('click',e=>{
+    e.stopPropagation(); setModel(btn.dataset.name); $('#modelMenu').classList.add('hidden');
+  }));
+}
+
+function renderBranch(){
+  const group=tools[activeCategory];
+  $('#pageTitle').textContent=group.title;
+  $('#pageSubtitle').textContent=group.subtitle;
+  const row=$('#childRow');
+  const branch=$('#branch');
+  if(!group.children.length){
+    row.innerHTML=''; branch.classList.add('hidden');
+    $('#modelCard').classList.remove('hidden');
+    setModel('BS-RoFormer Duality v1');
+    return;
+  }
+  branch.classList.remove('hidden');
+  row.innerHTML=group.children.map(item=>`<button class="child-tool ${item.id===activeChild?'active':''}" data-child="${item.id}"><span class="tool-icon">${item.icon}</span><span>${item.label}</span></button>`).join('');
+  $$('.child-tool').forEach(btn=>btn.addEventListener('click',()=>{
+    activeChild=btn.dataset.child;
+    const item=group.children.find(x=>x.id===activeChild);
+    $$('.child-tool').forEach(x=>x.classList.toggle('active',x===btn));
+    if(item) setModel(item.model);
+  }));
+  const selected=group.children.find(x=>x.id===activeChild) || group.children[0];
+  if(!group.children.some(x=>x.id===activeChild)) activeChild=group.children[0].id;
+  setModel(selected?.model || group.children[0].model);
+}
+
+$$('.category').forEach(btn=>btn.addEventListener('click',()=>{
+  activeCategory=btn.dataset.category;
+  const group=tools[activeCategory];
+  if(group.children.length) activeChild=group.children[0].id;
+  $$('.category').forEach(x=>{
+    const on=x===btn; x.classList.toggle('active',on);
+    const arrow=x.querySelector('i'); if(arrow) arrow.textContent=on&&group.children.length?'⌃':'⌄';
+  });
+  renderBranch();
+}));
+
+$('#modelTrigger').addEventListener('click',e=>{
+  e.stopPropagation(); $('#modelMenu').classList.toggle('hidden');
+});
+$$('[data-model-tab]').forEach(btn=>btn.addEventListener('click',e=>{
+  e.stopPropagation(); activeModelTab=btn.dataset.modelTab;
+  $$('[data-model-tab]').forEach(x=>x.classList.toggle('active',x===btn));
+  renderModels();
+}));
+document.addEventListener('click',()=>$('#modelMenu').classList.add('hidden'));
+
+const uploadBox=$('#uploadBox');
+const fileInput=$('#fileInput');
+$('#chooseFile').addEventListener('click',()=>fileInput.click());
+fileInput.addEventListener('change',()=>fileInput.files[0]&&showFile(fileInput.files[0]));
+['dragenter','dragover'].forEach(type=>uploadBox.addEventListener(type,e=>{e.preventDefault();uploadBox.classList.add('drag')}));
+['dragleave','drop'].forEach(type=>uploadBox.addEventListener(type,e=>{e.preventDefault();uploadBox.classList.remove('drag')}));
+uploadBox.addEventListener('drop',e=>{const file=e.dataTransfer.files[0]; if(file)showFile(file)});
+function showFile(file){
+  $('#selectedFileName').textContent=file.name;
+  $('#selectedFileMeta').textContent=`${(file.size/1024/1024).toFixed(1)} MB · listo`;
+  $('#selectedFile').classList.remove('hidden');
+}
+$('#clearFile').addEventListener('click',()=>{fileInput.value='';$('#selectedFile').classList.add('hidden')});
+
+$('#pasteUrl').addEventListener('click',()=>$('#urlModal').classList.remove('hidden'));
+$('#closeUrl').addEventListener('click',()=>$('#urlModal').classList.add('hidden'));
+$('#urlModal').addEventListener('click',e=>{if(e.target.id==='urlModal')e.currentTarget.classList.add('hidden')});
+$('#urlSubmit').addEventListener('click',()=>{
+  const value=$('#urlInput').value.trim();
+  if(!value){toast('Pega una URL primero');return}
+  $('#urlModal').classList.add('hidden');
+  $('#selectedFileName').textContent=value;
+  $('#selectedFileMeta').textContent='URL cargada · lista';
+  $('#selectedFile').classList.remove('hidden');
+});
+
+let compact=false;
+$('#showLess').addEventListener('click',()=>{
+  compact=!compact;
+  $('#modelCard').classList.toggle('hidden',compact);
+  $('#showLess').querySelector('span').textContent=compact?'Mostrar más':'Mostrar menos';
+  $('#showLess').querySelector('i').textContent=compact?'⌄':'⌃';
+});
+
+$('#avatarBtn').addEventListener('click',e=>{e.stopPropagation();$('#sidePopover').classList.add('hidden');$('#accountMenu').classList.toggle('hidden')});
+$('#menuBtn').addEventListener('click',e=>{e.stopPropagation();$('#accountMenu').classList.add('hidden');$('#sidePopover').classList.toggle('hidden')});
+$('#accountMenu').addEventListener('click',e=>e.stopPropagation());
+$('#sidePopover').addEventListener('click',e=>e.stopPropagation());
+document.addEventListener('click',()=>{$('#accountMenu').classList.add('hidden');$('#sidePopover').classList.add('hidden')});
+$$('#accountMenu button,#sidePopover button').forEach(btn=>btn.addEventListener('click',()=>toast(btn.textContent.trim())));
+
+$('#prevHistory').addEventListener('click',()=>{historyOffset=(historyOffset-1+historyData.length)%historyData.length;renderHistory()});
+$('#nextHistory').addEventListener('click',()=>{historyOffset=(historyOffset+1)%historyData.length;renderHistory()});
+$('#selectHistory').addEventListener('change',e=>toast(e.target.checked?'Selección activada':'Selección desactivada'));
+
+renderModels();
+renderHistory();
+renderBranch();
