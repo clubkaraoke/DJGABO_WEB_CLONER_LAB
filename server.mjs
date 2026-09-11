@@ -44,6 +44,7 @@ function checkRate(req) {
   if (now - entry.start > 3600000) {
     entry.start = now;
     entry.count = 0;
+
   }
   entry.count += 1;
   rate.set(key, entry);
@@ -182,7 +183,7 @@ app.get('/api/jobs/:id/screenshot/:name', async (req, res) => {
 });
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Ruta no encontrada.' }));
-app.get('*', (_req, res) => res.sendFile(path.join(ROOT, 'public', 'index.html')));
+app.use((_req, res) => res.sendFile(path.join(ROOT, 'public', 'index.html')));
 
 app.listen(PORT, HOST, () => {
   console.log(`DJGABO WEB CLONER LAB V0.2 escuchando en http://${HOST}:${PORT}`);
